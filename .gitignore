@@ -1,2 +1,5 @@
 *.o
 exec
+dynamic
+sequential
+static
