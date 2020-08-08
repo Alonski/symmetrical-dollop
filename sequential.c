@@ -23,11 +23,11 @@ double heavy(int x, int y)
 
 int main(int argc, char *argv[])
 {
-    MPI_Init(&argc, &argv);
-
     int x, y;
     int N = 20;
     double start_time, answer = 0;
+
+    MPI_Init(&argc, &argv);
 
     start_time = MPI_Wtime();
 
@@ -37,4 +37,5 @@ int main(int argc, char *argv[])
 
     printf("Sequential answer = %e\n", answer);
     printf("Time %lf\n", MPI_Wtime() - start_time);
+    return 0;
 }
