@@ -18,6 +18,11 @@ Just run `make` in your terminal.
 
 This project must be run using `make run` and supplied the file(FILE) to run and the number(N) of processes to create in parallel.
 
+An example to build and run any program:
+```sh
+mpicc -c static.c && mpicc -o exec static.o -lm && mpiexec -np 4 ./exec 
+```
+
 An example to run the *Sequential* program:
 ```sh
 make run FILE=sequential N=1
