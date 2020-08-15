@@ -14,20 +14,21 @@ enum ranks
     WORK_TAG = 0,
     END_TAG = 1
 };
-void masterProcess(int num_procs);
-void slaveProcess();
-double heavy(int x, int y);
+
 struct Point
 {
     // Struct used to hold both x,y
     int x, y;
 };
 
+void masterProcess(int num_procs);
+void slaveProcess();
+int generateNumbers(struct Point *arr, int size);
+double heavy(int x, int y);
+
 int main(int argc, char *argv[])
 {
-    int x, y;
-    double answer = 0;
-    int my_rank, num_procs, i, my_num, result;
+    int my_rank, num_procs;
 
     MPI_Init(&argc, &argv);
 
@@ -37,11 +38,11 @@ int main(int argc, char *argv[])
 
     if (my_rank == ROOT)
     {
-        //will call master upon first instance
+        // The ROOT controls the other processes
         masterProcess(num_procs);
     }
     else
-        //all other tasks will happen in slave
+        // The actual calculations will happen for non ROOT processes.
         slaveProcess();
 
     MPI_Finalize();
@@ -52,7 +53,6 @@ int main(int argc, char *argv[])
 // its run time depends on x and y values
 double heavy(int x, int y)
 {
-    printf("Looping: X: %d - Y: %d", x, y);
     int i, loop = SHORT;
     double sum = 0;
     // Super heavy tasks
@@ -66,36 +66,23 @@ double heavy(int x, int y)
 
 void masterProcess(int num_procs)
 {
-    // Array of tasks which hold all the x,y Point pairs.
-    struct Point tasks[400];
-
-    double start = MPI_Wtime();
     MPI_Status status;
-    int worker_id;
-    struct Point *arr;
 
-    //define an array to hold all tasks where each task is a point to calculate, -1 is for removing the master instance as the master doesnt claculate
-    int arr_size = (num_procs - 1) * N * N;
-    int jobs_sent = 0,
-        // jobs to do == arr_size as each machine will run a single task at a time
-        jobs_to_do = arr_size;
-    int i = 0, x, y;
-    double my_sum = 0, source, tag, all_sum;
-    arr = (struct Point *)malloc(sizeof(struct Point) * arr_size);
+    double all_sum = 0, worker_sum = 0, start_time = MPI_Wtime();
+    int worker_id, x, y, source, tag, jobs_sent = 0, i = 0, arr_size = N * N;
 
-    // Create the tasks array which holds x,y Point pairs
-    for (x = 0; x < N; x++)
-    {
-        for (y = 0; y < N; y++)
-        {
-            tasks[i].x = x;
-            tasks[i].y = y;
-            i++;
-        }
-    }
+    // Set jobs to do == arr_size as each process will run a single task at a time
+    int jobs_to_do = arr_size;
+
+    // Define an array to hold all tasks where each task is an X,Y Point to calculate
+    struct Point *tasks = (struct Point *)malloc(sizeof(struct Point) * arr_size);
+    generateNumbers(tasks, N);
 
     for (worker_id = 1; worker_id < num_procs; worker_id++)
-        MPI_Send(arr + (worker_id - 1), sizeof(struct Point), MPI_INT, worker_id, WORK_TAG, MPI_COMM_WORLD);
+    {
+        // Send the first task to each process
+        MPI_Send(tasks + (worker_id - 1), sizeof(struct Point), MPI_INT, worker_id, WORK_TAG, MPI_COMM_WORLD);
+    }
 
     for (jobs_sent = num_procs - 1; jobs_sent < jobs_to_do; jobs_sent++)
     {
@@ -104,36 +91,61 @@ void masterProcess(int num_procs)
         else
             tag = END_TAG;
 
-        MPI_Recv(&my_sum, 1, MPI_INT, MPI_ANY_SOURCE, WORK_TAG, MPI_COMM_WORLD, &status);
+        // Receive a sum for a task from a process that isn't finished
+        MPI_Recv(&worker_sum, 1, MPI_DOUBLE, MPI_ANY_SOURCE, WORK_TAG, MPI_COMM_WORLD, &status);
+
         source = status.MPI_SOURCE;
-        MPI_Send(arr + jobs_sent, sizeof(struct Point), MPI_INT, source, tag, MPI_COMM_WORLD);
+
+        // Send another task to the received process
+        MPI_Send(tasks + jobs_sent, sizeof(struct Point), MPI_INT, source, tag, MPI_COMM_WORLD);
+
+        all_sum += worker_sum;
     }
 
     for (worker_id = 1; worker_id < num_procs; worker_id++)
     {
-        MPI_Recv(&my_sum, 1, MPI_INT, MPI_ANY_SOURCE, END_TAG, MPI_COMM_WORLD, &status);
-        all_sum += my_sum;
+        // Receive a sum for a task from a process that is finished
+        MPI_Recv(&worker_sum, 1, MPI_DOUBLE, MPI_ANY_SOURCE, END_TAG, MPI_COMM_WORLD, &status);
+
+        all_sum += worker_sum;
     }
 
-    printf("Total answer = %e\n", all_sum);
-    printf("Time %lf\n", MPI_Wtime() - start);
+    // Print the answers and the total time taken
+    printf("Dynamic answer = %e - Time %lf\n", all_sum, MPI_Wtime() - start_time);
 }
 
 void slaveProcess()
 {
-    int tag, my_sum, i;
-    struct Point my_point;
+    int tag;
+    double my_sum = 0;
+    struct Point my_task;
 
     MPI_Status status;
     do
     {
-        MPI_Recv(&my_point, sizeof(struct Point), MPI_INT, ROOT, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
-
+        // Receive a task from the ROOT process
+        MPI_Recv(&my_task, sizeof(struct Point), MPI_INT, ROOT, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
         tag = status.MPI_TAG;
 
-        my_sum += heavy(my_point.x, my_point.y);
+        // Calculate the current task
+        my_sum = heavy(my_task.x, my_task.y);
 
-        MPI_Send(&my_sum, 1, MPI_INT, ROOT, tag, MPI_COMM_WORLD);
-
+        // Return the result for this task to the ROOT process
+        MPI_Send(&my_sum, 1, MPI_DOUBLE, ROOT, tag, MPI_COMM_WORLD);
     } while (tag != END_TAG);
+}
+
+int generateNumbers(struct Point *arr, int size)
+{
+    int i = 0, x, y;
+
+    for (x = 0; x < size; x++)
+    {
+        for (y = 0; y < size; y++)
+        {
+            arr[i].x = x;
+            arr[i].y = y;
+            i++;
+        }
+    }
 }
