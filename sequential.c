@@ -35,7 +35,7 @@ int main(int argc, char *argv[])
         for (y = 0; y < N; y++)
             answer += heavy(x, y);
 
-    printf("Sequential answer = %e\n", answer);
-    printf("Time %lf\n", MPI_Wtime() - start_time);
+    // Print the answers and the total time taken
+    printf("Sequential answer = %e - Time %lf\n", answer, MPI_Wtime() - start_time);
     return 0;
 }
