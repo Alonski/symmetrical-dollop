@@ -15,6 +15,8 @@ struct Point
     int x, y;
 };
 
+int generateNumbers(struct Point *arr, int size);
+
 // This function performs heavy computations,
 // its run time depends on x and y values
 double heavy(int x, int y)
@@ -32,11 +34,8 @@ double heavy(int x, int y)
 
 int main(int argc, char *argv[])
 {
-    int my_rank, num_procs, my_size;
-    int x, y, i;
-    int N = 20;
-    int arr_size = N * N;
-    double start_time, my_sum, all_sum;
+    int my_rank, num_procs, my_size, x, y, i, N = 20, arr_size = N * N;
+    double start_time, my_sum, all_sum, calc;
 
     // Array of tasks scattered into each process
     struct Point *my_tasks;
@@ -52,17 +51,7 @@ int main(int argc, char *argv[])
     if (my_rank == ROOT)
     {
         start_time = MPI_Wtime();
-        i = 0;
-        // Create the tasks array which holds x,y Point pairs
-        for (x = 0; x < N; x++)
-        {
-            for (y = 0; y < N; y++)
-            {
-                tasks[i].x = x;
-                tasks[i].y = y;
-                i++;
-            }
-        }
+        generateNumbers(tasks, N);
     }
 
     // Broadcast all tasks to all processes. We know that tasks is a Point made up of two ints.
@@ -76,11 +65,11 @@ int main(int argc, char *argv[])
     // Scatter the tasks into my_tasks for each process. Again passing in the size * 2 to account for the Point struct
     MPI_Scatter(tasks, my_size * 2, MPI_INT, my_tasks, my_size * 2, MPI_INT, ROOT, MPI_COMM_WORLD);
 
-    // printf("Process %d. Size: %d. Calculating from X: %d Y: %d\n", my_rank, my_size, my_tasks[0].x, my_tasks[0].y);
     for (i = 0; i < my_size; i++)
     {
+        calc = heavy(my_tasks[i].x, my_tasks[i].y);
         // Calculate the sum for the tasks for each process
-        my_sum += heavy(my_tasks[i].x, my_tasks[i].y);
+        my_sum += calc;
     }
 
     if (my_rank == ROOT)
@@ -88,17 +77,14 @@ int main(int argc, char *argv[])
         // Calculate the remaining tasks that weren't handled by other processes in the case of a num_procs that isn't divisible by arr_size
         my_size = arr_size % num_procs;
         int start = arr_size - my_size;
-        // printf("Extra start: %d - my_size: %d\n", start, my_size);
-        // printf("Process %d. Size: %d. Calculating from X: %d Y: %d\n", my_rank, my_size, tasks[start].x, tasks[start].y);
 
         for (i = start; i < arr_size; i++)
         {
-            // printf("X: %d. Y: %d\n", tasks[i].x, tasks[i].y);
-            my_sum += heavy(tasks[i].x, tasks[i].y);
+            calc = heavy(my_tasks[i].x, my_tasks[i].y);
+            // printf("Received point: %d - %d. The sum is: %f\n", my_tasks[i].x, my_tasks[i].y, calc);
+            my_sum += calc;
         }
     }
-
-    // printf("Answer for process %d = %e\n", my_rank, my_sum);
 
     // Reduce the answers back to the root
     MPI_Reduce(&my_sum, &all_sum, 1, MPI_DOUBLE, MPI_SUM, ROOT, MPI_COMM_WORLD);
@@ -106,10 +92,24 @@ int main(int argc, char *argv[])
     if (my_rank == ROOT)
     {
         // Print the answers and the total time taken
-        printf("Total answer = %e\n", all_sum);
-        printf("Time %lf\n", MPI_Wtime() - start_time);
+        printf("Static answer = %e - Time %lf\n", all_sum, MPI_Wtime() - start_time);
     }
 
     MPI_Finalize();
     return 0;
+}
+
+int generateNumbers(struct Point *arr, int size)
+{
+    int i = 0, x, y;
+
+    for (x = 0; x < size; x++)
+    {
+        for (y = 0; y < size; y++)
+        {
+            arr[i].x = x;
+            arr[i].y = y;
+            i++;
+        }
+    }
 }
