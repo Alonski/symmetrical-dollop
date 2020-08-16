@@ -37,7 +37,7 @@ double heavy(int x, int y)
 
 int main(int argc, char *argv[])
 {
-    int my_rank, num_procs, my_size, x, y, i, N = 20, arr_size = N * N;
+    int my_rank, num_procs, my_size, N = 20, arr_size = N * N;
     double start_time, my_sum = 0, all_sum = 0;
 
     // Array of tasks scattered into each process
